@@ -81,10 +81,17 @@ Now, you are ready to use this image! (New file: `my-app.tpm`)
 
 If you use CLI:
 ```bash
-  tripmine-cli run my-app.tpm
-     SHELL   $ python3 main.py
-      OUT    Hello, Tripmine!
-      LOG    Program exitted with code 0
+  tripmine run my-app.tpm
+    LOG   Loading my-app into cache
+    LOG   Unwrapping mirrors...
+   SHELL  $ which apt
+   SHELL  $ wget https://www.python.org/ftp/python/3.14.1/Python-3.14.1.tgz
+    TAR   Unwrapping tarball to /my-app/tmp/bin/Python-3.14.1
+   SHELL  $ ./configure --prefix=$TRIPMINE_IMAGES_LOADED/my-app/system/bin
+   SHELL  $ make
+   SHELL  $ make install
+    LOG   Successfully mirrored python3
+   ENTRY  $ python3 main.py
 ```
 ## Config Documentation `YAML`
 
