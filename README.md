@@ -1,6 +1,8 @@
 
 # Tripmine
 
+## How to use?
+
 An alternative for serverless web hosting.
 
 Bundles your code into an image and you can deploy the box and make it run quick.
