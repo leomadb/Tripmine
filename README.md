@@ -25,7 +25,7 @@ Clone into Tripmine-v1.0
 Go to the project directory
 
 ```bash
-  cd tripmine
+  cd Tripmine
 ```
 
 Start the install shell script, installs everything for you.
