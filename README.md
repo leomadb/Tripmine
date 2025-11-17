@@ -84,7 +84,6 @@ If you use CLI:
   tripmine run my-app.tpm
     LOG   Loading my-app into cache
     LOG   Unwrapping mirrors...
-   SHELL  $ which apt
    SHELL  $ wget https://www.python.org/ftp/python/3.14.1/Python-3.14.1.tgz
     TAR   Unwrapping tarball to /my-app/tmp/bin/Python-3.14.1
    SHELL  $ ./configure --prefix=$TRIPMINE_IMAGES_LOADED/my-app/system/bin
