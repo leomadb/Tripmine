@@ -19,7 +19,7 @@ The concept of tripmine is to make cloud apps by instead of using a VM, it makes
 Clone into Tripmine-v1.0
 
 ```bash
-  git clone https://link-to-tripmine
+  git clone (https://github.com/leomadb/Tripmine)
 ```
 
 Go to the project directory
