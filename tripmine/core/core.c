@@ -16,30 +16,19 @@
 
 // Inside the Cube Namespace
 static int child_function(void *arg) {
-    printf("[Cube] You are inside a Tripmine Cube! How cool is that?\n");
-
-    // TODO: Setup Hostname
-    // TODO: Mount /proc
-    // TODO: Pivot Root
-    // TODO: Execve bash
-
+    
     char *args[] = {
-        "/bin/bash",
+        "./shell",
         NULL
     };
 
     char *env[] = {
-        "PATH=/.vscode/",
-        "HOME=/",
+        "TRIP_PATH='/bin/'",
+        "PROMPT='false'",
         NULL
     };
 
-    int result = execve("/bin/bash", args, env);
-
-    if (result == -1) {
-        perror("[Cube] Failed!\n");
-        exit(1);
-    }
+    execve("./shell", args, env);
 
     return 0;
 }
@@ -53,20 +42,52 @@ int main() {
         exit(1);
     }
 
-    pid_t pid = clone(child_function,
+    // Prepare execution
+    int pipefd[2];
+
+    if (pipe(pipefd) == -1) {
+        perror("Pipe creation failed");
+        exit(1);
+    }
+
+    pid_t pid1, pid2;
+
+    // Start execution
+    pid2 = fork();
+    if (pid2 == 0) {
+        dup2(pipefd[0], STDIN_FILENO);
+        close(pipefd[0]);
+
+        pid_t pid = clone(child_function,
         stack + STACK_SIZE,
         CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD,
         NULL);
     
-    if (pid == -1) {
-        perror("Clone Failed.\n");
-        exit(1);
-    }
+        if (pid == -1) {
+            perror("Clone Failed.\n");
+            exit(1);
+        }
 
-    printf("[Host] Cube spawned with PID: %d\n", pid);
+        printf("[Host] Cube spawned with PID: %d\n", pid);
+
+        // Run test command
+        char *cmd = "echo Hello World!\n";
+        write(pipefd[1], cmd, strlen(cmd));
+
+        // Exit
+        cmd = "exit\n";
+        write(pipefd[1], cmd, strlen(cmd));
+
+        close(pipefd[1]);
+    }
+    
 
     // Wait for the cube to finish
-    waitpid(pid, NULL, 0);
+    close(pipefd[0]);
+    close(pipefd[1]);
+
+    waitpid(pid1, NULL, 0);
+    waitpid(pid2, NULL, 0);
     
     printf("[Host] Cube terminated.\n");
     free(stack);

@@ -193,8 +193,14 @@ func runBuiltin(cmd *Command, stdin io.Reader, stdout io.Writer, stderr io.Write
 
 // --- 4. MAIN LOOP ---
 func main() {
+
+	isPrompt := os.Getenv("PROMPT")
+	if isPrompt == "" {isPrompt = "true"}
+
 	reader := bufio.NewReader(os.Stdin)
-	fmt.Println("Tripmine Shell v3.0 (Full Logic)")
+	if isPrompt == "true" {
+		fmt.Println("Tripmine Shell v3.0 (Full Logic)")
+	}
 
 	// Ignore Ctrl+C in the shell itself (pass to children)
 	c := make(chan os.Signal, 1)
@@ -210,9 +216,12 @@ func main() {
 	basePath := os.Getenv("TRIP_PATH")
 	if basePath == "" { basePath = "/bin" } // Default fallback
 
+	i := 0
 	for {
 		cwd, _ := os.Getwd()
-		fmt.Printf("\033[1;32mtrip\033[0m:\033[1;34m%s\033[0m$ ", filepath.Base(cwd))
+		if isPrompt == "true" {
+			fmt.Printf("\033[1;32mtrip\033[0m:\033[1;34m%s\033[0m$ ", filepath.Base(cwd))
+		}
 
 		inputLine, err := reader.ReadString('\n')
 		if err != nil { break } // EOF
@@ -321,5 +330,6 @@ func main() {
 			
 			lastStdin = pipeReader
 		}
+		i++
 	}
 }
