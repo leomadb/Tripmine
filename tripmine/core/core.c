@@ -10,86 +10,85 @@
 #include <stdio.h>      // printf(), perror()
 #include <stdlib.h>     // malloc(), free(), exit()
 #include <string.h>     // strerror()
-#include <errno.h>      // errno
+#include <errno.h>      // 
+#include <utils.h>
 
 #define STACK_SIZE (1024 * 1024)
 
+struct CubeConfig {
+    int pipe_write_fd;
+    char *binary_path;
+    char **binary_args;
+    char *hostname;
+};
+
 // Inside the Cube Namespace
 static int child_function(void *arg) {
+    struct CubeConfig *config = (struct CubeConfig *)args;
+
+    if (dup2(config->pipe_write_fd, STDOUT_FILENO) == -1) perror("dup2 stdout");
+    if (dup2(config->pipe_write_fd, STDERR_FILENO) == -1) perror("dup2 stderr");
+    close(config->pipe_write_fd);
+
+    // Active Flushing
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+
+    // Isolation
+    if (sethostname(config->hostname, strlen(config->hostname)) != 0) {
+        perror("sethostname failed");
+    }
+
+    // TODO: Mounts and Pivot_Root would go here in Phase 2
     
-    char *args[] = {
-        "./shell",
-        NULL
-    };
-
-    char *env[] = {
-        "TRIP_PATH='/bin/'",
+    // Setup Environment
+    char *env[] = { 
+        "TRIP_PATH=/", 
+        "HOME=/", 
+        "TERM=xterm-256color", 
         "PROMPT='false'",
-        NULL
+        NULL 
     };
 
-    execve("./shell", args, env);
+    printf("[Cube] Launching %s inside %s...\n", config->binary_path, config->hostname);
 
-    return 0;
+    // Execute
+    execve(config->binary_path, config->binary_args, env);
+
+    // If we get here, execve failed.
+    perror("Execve Failed");
+    return 1;
 }
 
-int main() {
-    printf("[Host] Starting cube...\n");
+void parse_args(/*int argc,*/ /*char *argv[],*/ struct CubeConfig *cfg) {
+    // Defaults
+    cfg->binary_path = "./shell";
+    cfg->hostname = randomName();
+    cfg->binary_args = malloc(2 * sizeof(char*));
+    cfg->binary_args[0] = "./shell";
+    cfg->binary_args[1] = NULL;
 
+    // TODO: Parsing
+}
+
+int main(/*int argc, char *argv[]*/) {
+    struct CubeConfig config;
+    parse_args(&config);
+
+    // Make pipes
+    int log_pipe[2];
+    if (pipe(log_pipe) == -1) { perror("pipe"); exit(1); }
+    config.pipe_write_fd = log_pipe[1];
+
+    // Clone
     char *stack = malloc(STACK_SIZE);
-    if (!stack) {
-        printf("Malloc Failed!\n");
-        exit(1);
-    }
-
-    // Prepare execution
-    int pipefd[2];
-
-    if (pipe(pipefd) == -1) {
-        perror("Pipe creation failed");
-        exit(1);
-    }
-
-    pid_t pid1, pid2;
-
-    // Start execution
-    pid2 = fork();
-    if (pid2 == 0) {
-        dup2(pipefd[0], STDIN_FILENO);
-        close(pipefd[0]);
-
-        pid_t pid = clone(child_function,
+    pid_t pid = clone(child_function,
         stack + STACK_SIZE,
         CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD,
-        NULL);
-    
-        if (pid == -1) {
-            perror("Clone Failed.\n");
-            exit(1);
-        }
+        &config
+    );
 
-        printf("[Host] Cube spawned with PID: %d\n", pid);
+    if (pid == -1) { perror("Clone Failed"); exit(1); }
 
-        // Run test command
-        char *cmd = "echo Hello World!\n";
-        write(pipefd[1], cmd, strlen(cmd));
-
-        // Exit
-        cmd = "exit\n";
-        write(pipefd[1], cmd, strlen(cmd));
-
-        close(pipefd[1]);
-    }
-    
-
-    // Wait for the cube to finish
-    close(pipefd[0]);
-    close(pipefd[1]);
-
-    waitpid(pid1, NULL, 0);
-    waitpid(pid2, NULL, 0);
-    
-    printf("[Host] Cube terminated.\n");
-    free(stack);
     return 0;
 }
