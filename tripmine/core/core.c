@@ -15,81 +15,59 @@
 #define STACK_SIZE (1024 * 1024)
 
 struct CubeConfig {
-    int pipe_write_fd;
-    char command_list[64];
+    int in_pipe;
+    int out_pipe;
+    char **command_list;
     char *hostname;
+    char *cwd;
+    char *env[];
 };
 
 // Inside the Cube Namespace
 static int child_function(void *arg) {
     struct CubeConfig *config = (struct CubeConfig *)arg;
 
-    if (dup2(config->pipe_write_fd, STDIN_FILENO) == -1) perror("dup2 stdout");
-    close(config->pipe_write_fd);
-
-    // Isolation
-    if (sethostname(config->hostname, strlen(config->hostname)) != 0) {
-        perror("sethostname failed");
-    }
-
-    // TODO: Mounts and Pivot_Root would go here in Phase 2
+    // TODO: Execution
     
-    // Setup Environment
-    char *env[] = { 
-        "TRIP_PATH=/", 
-        "HOME=/", 
-        "TERM=xterm-256color", 
-        "PROMPT='false'",
-        NULL 
-    };
-
-    char *args[] = {
-        "./shell",
-        NULL
-    };
-
-    // Actively flush output while execve
-
-    // Execute Commands
-    if (execve("./shell", args, env) == -1) {
-        perror("execve failed");
-        exit(1);
-    };
-
-    for (int i = 0; config->command_list[i] != NULL; i++) {
-        // This loop is a placeholder for executing commands
-        // Actual command execution logic would go here
-        write(config->pipe_write_fd, config->command_list[i], strlen(config->command_list[i]));
-        write(config->pipe_write_fd, "\n", 1);
-    }
-
-    close(config->pipe_write_fd);
 
     return 1;
 }
 
-void parse_args(/*int argc,*/ /*char *argv[],*/ struct CubeConfig *cfg) {
+void parse_args(int argc, char *argv[] struct CubeConfig *cfg) {
     // Defaults
-    static char *default_commands[] = { "echo", "Hello", "World!", NULL };
-    memcpy(cfg->command_list, default_commands, sizeof(default_commands));
+    cfg->env = [
+        "TRIP_PATH=/",
+        "HOME=/",
+        "TERM=xterm-256color",
+        "PROMPT=false",
+        NULL
+    ];
     cfg->hostname = "tripmine";
+    cfg->cwd = "/tripmine/";
+    
     // TODO: Parsing
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--hostname") == 0) {
+            cfg->hostname = argv[i + 1];
+            cfg->cwd = malloc(strlen("/" + strlen(cfg->hostname) + strlen("/"));
+            cfg->cwd = strcat("/", cfg->hostname, "/");
+        } else if (strcmp(argv[i], "--env") == 0) {
+            cfg->env = argv[i + 1];
+        } else if (strcmp(argv[i], "--command") == 0) {
+            cfg->command_list = argv[i + 1];
+        }
+    }
 }
 
-int main(/*int argc, char *argv[]*/) {
+int main(int argc, char *argv[]) {
+    // Define and structure
     struct CubeConfig config;
-    parse_args(&config);
-
-    // Make pipes
-    int log_pipe[2];
-    if (pipe(log_pipe) == -1) { perror("pipe"); exit(1); }
-    config.pipe_write_fd = log_pipe[1];
-
-    // Clone
+    parse_args(argc, argv, &config);
+    
     char *stack = malloc(STACK_SIZE);
     pid_t pid = clone(child_function,
         stack + STACK_SIZE,
-        CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | SIGCHLD,
+        CLONE_NEWUTS | CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWNET | SIGCHLD,
         &config
     );
 
