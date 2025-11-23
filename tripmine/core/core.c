@@ -10,29 +10,22 @@
 #include <stdio.h>      // printf(), perror()
 #include <stdlib.h>     // malloc(), free(), exit()
 #include <string.h>     // strerror()
-#include <errno.h>      // 
-#include <utils.h>
+#include <errno.h>      // errno
 
 #define STACK_SIZE (1024 * 1024)
 
 struct CubeConfig {
     int pipe_write_fd;
-    char *binary_path;
-    char **binary_args;
+    char command_list[64];
     char *hostname;
 };
 
 // Inside the Cube Namespace
 static int child_function(void *arg) {
-    struct CubeConfig *config = (struct CubeConfig *)args;
+    struct CubeConfig *config = (struct CubeConfig *)arg;
 
-    if (dup2(config->pipe_write_fd, STDOUT_FILENO) == -1) perror("dup2 stdout");
-    if (dup2(config->pipe_write_fd, STDERR_FILENO) == -1) perror("dup2 stderr");
+    if (dup2(config->pipe_write_fd, STDIN_FILENO) == -1) perror("dup2 stdout");
     close(config->pipe_write_fd);
-
-    // Active Flushing
-    setvbuf(stdout, NULL, _IONBF, 0);
-    setvbuf(stderr, NULL, _IONBF, 0);
 
     // Isolation
     if (sethostname(config->hostname, strlen(config->hostname)) != 0) {
@@ -50,24 +43,36 @@ static int child_function(void *arg) {
         NULL 
     };
 
-    printf("[Cube] Launching %s inside %s...\n", config->binary_path, config->hostname);
+    char *args[] = {
+        "./shell",
+        NULL
+    };
 
-    // Execute
-    execve(config->binary_path, config->binary_args, env);
+    // Actively flush output while execve
 
-    // If we get here, execve failed.
-    perror("Execve Failed");
+    // Execute Commands
+    if (execve("./shell", args, env) == -1) {
+        perror("execve failed");
+        exit(1);
+    };
+
+    for (int i = 0; config->command_list[i] != NULL; i++) {
+        // This loop is a placeholder for executing commands
+        // Actual command execution logic would go here
+        write(config->pipe_write_fd, config->command_list[i], strlen(config->command_list[i]));
+        write(config->pipe_write_fd, "\n", 1);
+    }
+
+    close(config->pipe_write_fd);
+
     return 1;
 }
 
 void parse_args(/*int argc,*/ /*char *argv[],*/ struct CubeConfig *cfg) {
     // Defaults
-    cfg->binary_path = "./shell";
-    cfg->hostname = randomName();
-    cfg->binary_args = malloc(2 * sizeof(char*));
-    cfg->binary_args[0] = "./shell";
-    cfg->binary_args[1] = NULL;
-
+    static char *default_commands[] = { "echo", "Hello", "World!", NULL };
+    memcpy(cfg->command_list, default_commands, sizeof(default_commands));
+    cfg->hostname = "tripmine";
     // TODO: Parsing
 }
 
@@ -89,6 +94,9 @@ int main(/*int argc, char *argv[]*/) {
     );
 
     if (pid == -1) { perror("Clone Failed"); exit(1); }
+
+    close(log_pipe[1]);
+    waitpid(pid, NULL, 0);
 
     return 0;
 }
