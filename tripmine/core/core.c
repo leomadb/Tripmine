@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <errno.h>
 #include <string.h>
+#include <stdlib.h>
 #include <sys/syscall.h> // For syscall(SYS_pivot_root, ...)
 
 struct CubeConfig {
@@ -161,7 +162,6 @@ void setup_fs(struct CubeConfig *config) {
     printf("  %s -> /bin (RO)\n", host_mirrors);
     printf("  %s -> /lib (RW)\n", host_frame);
     printf("[Cube %d] Cube is ready to proceed.\n", cube_id);
-    return 0;
 }
 
 int main(int argc, char *argv[]) {
