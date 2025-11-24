@@ -12,10 +12,10 @@
 
 struct CubeConfig {
     int in_pipe;
-    int out_pipe;
     int cube_id;
     char* image_name;
-    char** commands;
+    char* commands[16];
+    int memory;
 };
 
 // Recursive directory function
@@ -142,6 +142,9 @@ void setup_fs(struct CubeConfig *config) {
 }
 
 static int child_function(void *args) {
+
+    fprintf(stderr, "!!! CHILD IS ALIVE (PID: %d) !!!\n", getpid());
+
     struct CubeConfig *config = (struct CubeConfig *)args;
 
     setup_fs(config);
@@ -149,11 +152,11 @@ static int child_function(void *args) {
 
     // Pipe
     dup2(config->in_pipe, STDIN_FILENO);
-    dup2(config->out_pipe, STDOUT_FILENO);
-    dup2(config->out_pipe, STDERR_FILENO);
     
     close(config->in_pipe);
-    close(config->out_pipe);
+
+    setvbuf(stdout, NULL, _IONBF, 0); 
+    setvbuf(stderr, NULL, _IONBF, 0);
 
     char* env[] = {
         "TRIP_PATH=/bin",
@@ -169,38 +172,51 @@ static int child_function(void *args) {
 int main(int argc, char *argv[]) {
     struct CubeConfig config;
     config.cube_id = atoi(argv[1]);
+    printf("[Core] Cube ID: %d\n", config.cube_id);
     config.image_name = argv[2];
-    for (int i = 3; i < argc; i++) {
-        config.commands[i - 3] = argv[i];
+    printf("[Core] Image Name: %s\n", config.image_name);
+    config.memory = atoi(argv[3]);
+    printf("[Core] Memory Limit: %d\n", config.memory);
+    
+    size_t x = 4;
+    while (x < argc) {
+        config.commands[x - 4] = argv[x];
+        x++;
     }
-    config.commands[argc - 3] = NULL;
+    config.commands[x - 4] = NULL;
+    for (size_t i = 0; i < x - 4; i++) {
+        printf("[Core] Command %zu: %s\n", i, config.commands[i]);
+    }
 
     int pipein[2];
-    int pipeout[2];
-    if (pipe(pipein) == -1 || pipe(pipeout) == -1) {
+    if (pipe(pipein) == -1) {
         perror("pipe");
         exit(1);
     }
 
     config.in_pipe = pipein[0];
-    config.out_pipe = pipeout[1];
 
-    pid_t pid = clone(child_function, NULL, CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNET, &config);
+    printf("[Core] Spawning cube %d...\n", config.cube_id);
+
+    char stack[config.memory];
+    pid_t pid = clone(
+        child_function, 
+        stack + sizeof(stack), 
+        CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNET, 
+        &config);
     if (pid == -1) {
         perror("clone");
         exit(1);
     }
 
-    char buffer[1024];
-    int n;
-    while ((n = read(pipeout[0], buffer, sizeof(buffer))) > 0) {
-        write(STDOUT_FILENO, buffer, n);
+    for (size_t i = 0; i < x - 4; i++) {
+        write(pipein[1], config.commands[i], strlen(config.commands[i]));
     }
-    close(pipeout[0]); 
+    
+    close(pipein[0]); 
 
     waitpid(pid, NULL, 0);
-    close(pipein[0]);
-    close(pipeout[1]);
+    close(pipein[1]);
 
     return 0;
 }
