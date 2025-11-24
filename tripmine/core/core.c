@@ -7,6 +7,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <sys/syscall.h> // For syscall(SYS_pivot_root, ...)
+#include <sys/wait.h>
+#include <sys/stat.h>
 
 struct CubeConfig {
     int in_pipe;
@@ -15,31 +17,6 @@ struct CubeConfig {
     char* image_name;
     char** commands;
 };
-
-static int child_function(void *args) {
-    struct CubeConfig *config = (struct CubeConfig *)args;
-
-    // Pipe
-    dup2(config->in_pipe, STDIN_FILENO);
-    dup2(config->out_pipe, STDOUT_FILENO);
-    dup2(config->out_pipe, STDERR_FILENO);
-    
-    close(config->in_pipe);
-    close(config->out_pipe);
-
-    setup_fs(config);
-    enter_jail(config->cube_id);
-
-    char* env[] = {
-        "TRIP_PATH=/bin",
-        "PROMPT=false",
-        NULL
-    };
-
-    execve("/bin/sh", NULL, env);
-    
-    return 0;
-}
 
 // Recursive directory function
 void mkdir_p(const char *path) {
@@ -107,16 +84,8 @@ void setup_fs(struct CubeConfig *config) {
     char cube_root[256], target_bin[256], target_lib[256];
     char* shell_path = "/var/tripmine/bin/shell";
     char target_shell[256];
-
-    /*
-        TODO:
-        1. Parse args
-        2. Create a new mount namespace *
-        3. Mount *
-        4. Load the dependencies into /bin/ of the namespace *
-        5. Pivot the root to the new root *
-        6. Execute the command
-    */
+    char* system_path = "/var/tripmine/images/%s/system";
+    char target_system[256];
 
     int cube_id = config->cube_id;
     char* image_name = config->image_name;
@@ -128,6 +97,8 @@ void setup_fs(struct CubeConfig *config) {
     sprintf(target_bin, "%s/bin/", cube_root);
     sprintf(target_lib, "%s/lib/", cube_root);
     sprintf(target_shell, "%s/bin/sh", cube_root);
+    sprintf(system_path, "/var/tripmine/images/%s/system", image_name);
+    sprintf(target_system, "%s/usr/", cube_root);
     
     mkdir_p(cube_root);
     mkdir_p(target_bin);
@@ -158,15 +129,46 @@ void setup_fs(struct CubeConfig *config) {
     }
     mount(NULL, target_shell, NULL, MS_BIND | MS_REMOUNT | MS_RDONLY, NULL);
 
+    // Mount system into /usr/ (READ WRITE)
+    if (mount(system_path, target_system, NULL, MS_BIND | MS_REC, NULL) != 0) {
+        perror("System mounting failed");
+        exit(1);
+    }
+
     printf("[Cube %d] FS Steup done.\n", cube_id);
     printf("  %s -> /bin (RO)\n", host_mirrors);
     printf("  %s -> /lib (RW)\n", host_frame);
     printf("[Cube %d] Cube is ready to proceed.\n", cube_id);
 }
 
+static int child_function(void *args) {
+    struct CubeConfig *config = (struct CubeConfig *)args;
+
+    // Pipe
+    dup2(config->in_pipe, STDIN_FILENO);
+    dup2(config->out_pipe, STDOUT_FILENO);
+    dup2(config->out_pipe, STDERR_FILENO);
+    
+    close(config->in_pipe);
+    close(config->out_pipe);
+
+    setup_fs(config);
+    enter_jail(config->cube_id);
+
+    char* env[] = {
+        "TRIP_PATH=/bin",
+        "PROMPT=false",
+        NULL
+    };
+
+    execve("/bin/sh", NULL, env);
+    
+    return 0;
+}
+
 int main(int argc, char *argv[]) {
     struct CubeConfig config;
-    config.cube_id = argv[1];
+    config.cube_id = atoi(argv[1]);
     config.image_name = argv[2];
     for (int i = 3; i < argc; i++) {
         config.commands[i - 3] = argv[i];
