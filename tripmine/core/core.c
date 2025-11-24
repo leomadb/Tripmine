@@ -144,6 +144,9 @@ void setup_fs(struct CubeConfig *config) {
 static int child_function(void *args) {
     struct CubeConfig *config = (struct CubeConfig *)args;
 
+    setup_fs(config);
+    enter_jail(config->cube_id);
+
     // Pipe
     dup2(config->in_pipe, STDIN_FILENO);
     dup2(config->out_pipe, STDOUT_FILENO);
@@ -151,9 +154,6 @@ static int child_function(void *args) {
     
     close(config->in_pipe);
     close(config->out_pipe);
-
-    setup_fs(config);
-    enter_jail(config->cube_id);
 
     char* env[] = {
         "TRIP_PATH=/bin",
@@ -185,17 +185,10 @@ int main(int argc, char *argv[]) {
     config.in_pipe = pipein[0];
     config.out_pipe = pipeout[1];
 
-    pid_t pid = fork();
+    pid_t pid = clone(child_function, NULL, CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWUTS | CLONE_NEWIPC | CLONE_NEWNET, &config);
     if (pid == -1) {
-        perror("fork");
+        perror("clone");
         exit(1);
-    } else if (pid == 0) {
-        close(pipein[0]);
-        close(pipeout[1]);
-        child_function(&config);
-    } else {
-        close(pipein[1]);
-        close(pipeout[0]);
     }
 
     char buffer[1024];
