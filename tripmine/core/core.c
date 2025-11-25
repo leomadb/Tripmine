@@ -103,6 +103,7 @@ void setup_fs(struct CubeConfig *config) {
     mkdir_p(cube_root);
     mkdir_p(target_bin);
     mkdir_p(target_lib);
+    mkdir_p(target_system);
 
     // Mount Mirrors->/bin/ (READ ONLY)
     if (mount(host_mirrors, target_bin, NULL, MS_BIND | MS_REC, NULL) != 0) {
